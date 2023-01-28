@@ -1,6 +1,7 @@
 use std::{
-    io::{prelude::*, BufReader},
+    io::prelude::*,
     net::{TcpListener, TcpStream},
+    thread,
 };
 
 fn main() {
@@ -11,18 +12,34 @@ fn main() {
     for stream in listener.incoming() {
         let stream = stream.unwrap();
 
-        handle_connection(stream);
+        thread::spawn(|| {
+            handle_connection(stream);
+        });
     }
 }
 
 fn handle_connection(mut stream: TcpStream) {
-    let reader = BufReader::new(&stream);
-    let lines: Vec<_> = reader.lines().map(|l| l.unwrap()).collect();
+    println!("Handling connection from {}", stream.peer_addr().unwrap());
 
-    println!("Request: {}", lines.join(""));
+    let mut handled_data: usize = 0;
 
-    match stream.write_all(lines.join("").as_bytes()) {
-        Ok(_) => println!("OK"),
-        Err(e) => println!("Error: {}", e),
+    loop {
+        println!("Waiting for data...");
+        let mut receive_buffer = [0; 1024];
+        match stream.read(&mut receive_buffer) {
+            Ok(0) => break,
+            Ok(size) => {
+                handled_data += size;
+                if handled_data > 1024 * 1024 {
+                    stream.shutdown(std::net::Shutdown::Both).unwrap();
+                    break;
+                }
+                stream.write(&receive_buffer).unwrap();
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                break;
+            }
+        }
     }
 }
