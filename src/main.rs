@@ -1,12 +1,18 @@
 use std::{
+    env,
     io::prelude::*,
-    net::{TcpListener, TcpStream},
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream},
 };
 
 use smoke_test::ThreadPool;
 
 fn main() {
-    let listener = TcpListener::bind("0.0.0.0:8080").unwrap();
+    let port = env::var("PORT")
+        .unwrap_or("8080".to_string())
+        .parse::<u16>()
+        .unwrap_or(8080);
+    let address = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port);
+    let listener = TcpListener::bind(address).unwrap();
     let pool = ThreadPool::new(5);
 
     println!("Listening on {}", listener.local_addr().unwrap());
