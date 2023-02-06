@@ -1,4 +1,7 @@
 use std::{
+    env,
+    io::prelude::*,
+    net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
     sync::{mpsc, Arc, Mutex},
     thread,
 };
@@ -52,5 +55,55 @@ impl Worker {
         });
 
         Worker { id, thread }
+    }
+}
+
+fn get_address() -> SocketAddr {
+    let port = env::var("PORT")
+        .unwrap_or("8080".to_string())
+        .parse::<u16>()
+        .unwrap_or(8080);
+    SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), port)
+}
+
+fn create_listener() -> std::net::TcpListener {
+    let address = get_address();
+    let listener = std::net::TcpListener::bind(address).unwrap();
+    println!("Listening on {}", listener.local_addr().unwrap());
+    listener
+}
+
+fn handle_connection(mut stream: TcpStream) {
+    println!("Handling connection from {}", stream.peer_addr().unwrap());
+
+    let mut handled_data: usize = 0;
+
+    loop {
+        let mut receive_buffer = [0; 1024];
+        match stream.read(&mut receive_buffer) {
+            Ok(0) => break,
+            Ok(size) => {
+                handled_data += size;
+                if handled_data > 10 * 1024 {
+                    stream.shutdown(std::net::Shutdown::Both).unwrap();
+                    break;
+                }
+                stream.write(&receive_buffer).unwrap();
+            }
+            Err(e) => {
+                println!("Error: {}", e);
+                break;
+            }
+        }
+    }
+}
+
+pub fn serve(pool: &ThreadPool) {
+    let listener = create_listener();
+    for stream in listener.incoming() {
+        let stream = stream.unwrap();
+        pool.execute(|| {
+            handle_connection(stream);
+        });
     }
 }
